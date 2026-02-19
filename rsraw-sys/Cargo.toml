@@ -19,10 +19,16 @@ libc = "0.2"
 
 [features]
 default = []
+# Regenerate bindings at build time using libclang (dynamic loading).
+# Requires libclang.so/dylib to be available at build time.
+bindgen = ["dep:bindgen", "bindgen/runtime"]
+# Regenerate bindings at build time using libclang (static linking).
+# Use this on musl or other platforms where dlopen is unavailable.
+bindgen-static = ["dep:bindgen", "bindgen/static"]
 
 [lib]
 name = "rsraw_sys"
 
 [build-dependencies]
 cc = { version = "1.2", features = ["parallel"] }
-bindgen = { version = "0.71", default-features = false, features = ["runtime"] }
+bindgen = { version = "0.71", default-features = false, optional = true }

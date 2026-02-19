@@ -105,7 +105,6 @@ fn build(out_dir: impl AsRef<Path>) {
 
     // thread safety
     libraw.flag("-pthread");
-    libraw.static_flag(true);
     libraw.compile("raw");
 
     println!(
@@ -115,11 +114,53 @@ fn build(out_dir: impl AsRef<Path>) {
     println!("cargo:rustc-link-lib=static=raw");
 }
 
+/// Generate or copy FFI bindings.
+///
+/// By default (no `bindgen`/`bindgen-static` features), uses the pre-generated
+/// `src/bindings.rs` shipped with the crate. This avoids needing libclang at
+/// build time.
+///
+/// With `bindgen` or `bindgen-static` feature enabled, regenerates bindings
+/// from the LibRaw headers using `bindgen`. Use this when updating LibRaw.
 fn bindings(out_dir: impl AsRef<Path>) {
-    let path = out_dir.as_ref().join("bindings.rs");
-    if path.exists() {
+    let out_path = out_dir.as_ref().join("bindings.rs");
+    if out_path.exists() {
         return;
     }
+
+    #[cfg(any(feature = "bindgen", feature = "bindgen-static"))]
+    {
+        generate_bindings(&out_path);
+        return;
+    }
+
+    #[cfg(not(any(feature = "bindgen", feature = "bindgen-static")))]
+    {
+        // Use pre-generated bindings shipped with the crate.
+        let manifest_dir = env::var_os("CARGO_MANIFEST_DIR")
+            .expect("CARGO_MANIFEST_DIR not set");
+        let pregenerated = Path::new(&manifest_dir).join("src/bindings.rs");
+        if !pregenerated.exists() {
+            panic!(
+                "Pre-generated bindings not found at {}. \
+                 Either enable the `bindgen` or `bindgen-static` feature to \
+                 generate them, or ensure src/bindings.rs is present.",
+                pregenerated.display()
+            );
+        }
+        std::fs::copy(&pregenerated, &out_path).unwrap_or_else(|e| {
+            panic!(
+                "Failed to copy pre-generated bindings from {} to {}: {}",
+                pregenerated.display(),
+                out_path.display(),
+                e
+            );
+        });
+    }
+}
+
+#[cfg(any(feature = "bindgen", feature = "bindgen-static"))]
+fn generate_bindings(out_path: &Path) {
     let bindings = bindgen::Builder::default()
         .header("LibRaw/libraw/libraw.h")
         .use_core()
@@ -229,6 +270,6 @@ fn bindings(out_dir: impl AsRef<Path>) {
         .expect("Unable to generate bindings");
 
     bindings
-        .write_to_file(path)
+        .write_to_file(out_path)
         .expect("Couldn't write bindings!");
 }
