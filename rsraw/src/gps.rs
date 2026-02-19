@@ -8,11 +8,11 @@ pub struct GpsInfo {
     pub altitude: f32,
     /// Altitude reference: 0 = above sea level, 1 = below sea level.
     pub altref: i8,
-    /// Latitude reference: b\'N\' or b\'S\'.
+    /// Latitude reference: b'N' or b'S'.
     pub latref: i8,
-    /// Longitude reference: b\'E\' or b\'W\'.
+    /// Longitude reference: b'E' or b'W'.
     pub longref: i8,
-    /// GPS status: b\'A\' = measurement active, b\'V\' = measurement void.
+    /// GPS status: b'A' = measurement active, b'V' = measurement void.
     pub gpsstatus: i8,
     /// Whether GPS data was parsed (non-zero = valid).
     pub gpsparsed: i8,
