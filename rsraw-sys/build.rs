@@ -8,10 +8,6 @@ fn main() {
 
 fn build(out_dir: impl AsRef<Path>) {
     let mut libraw = cc::Build::new();
-    let compiler = libraw.get_compiler();
-    if compiler.is_like_msvc() {
-        panic!("MSVC is not supported");
-    }
 
     libraw.cpp(true);
     libraw.include("LibRaw/");
@@ -137,8 +133,7 @@ fn bindings(out_dir: impl AsRef<Path>) {
     #[cfg(not(any(feature = "bindgen", feature = "bindgen-static")))]
     {
         // Use pre-generated bindings shipped with the crate.
-        let manifest_dir = env::var_os("CARGO_MANIFEST_DIR")
-            .expect("CARGO_MANIFEST_DIR not set");
+        let manifest_dir = env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
         let pregenerated = Path::new(&manifest_dir).join("src/bindings.rs");
         if !pregenerated.exists() {
             panic!(
@@ -167,105 +162,40 @@ fn generate_bindings(out_path: &Path) {
         .ctypes_prefix("libc")
         .generate_comments(true)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-        // API improvements
-        .derive_eq(true)
-        .no_partialeq("__darwin_pthread_handler_rec")
-        .no_partialeq("_IO_FILE") // This is the unnamed struct with _close, _read, etc.
-        .no_partialeq("sigvec")
-        .no_partialeq("libraw_callbacks_t")
-        .no_partialeq("__sFILE")
+        // Only include LibRaw's public API — no platform types, no libc
+        // functions, no long double math, no darwin/glibc internals.
+        .allowlist_function("libraw_.*")
+        .allowlist_type("libraw_.*")
+        .allowlist_type("LibRaw_.*")
+        .allowlist_var("libraw_.*|LIBRAW_.*")
+        // ushort/uchar are defined in libraw_types.h and used pervasively
+        // in LibRaw struct fields. They must be included explicitly since
+        // they don't match the libraw_* prefix.
+        .allowlist_type("ushort")
+        .allowlist_type("uchar")
+        // Use libc crate's platform-correct definitions for OS types that
+        // leak in transitively (via internal_data_t and libraw_imgother_t).
+        // This avoids darwin/glibc-specific type chains in pre-generated
+        // bindings.
+        .blocklist_type("FILE")
+        .blocklist_type("time_t")
+        // Block transitive platform types that bindgen emits even though
+        // nothing in the LibRaw API directly uses them.
+        .blocklist_type("__sFILE.*")
+        .blocklist_type("__sbuf")
+        .blocklist_type("__darwin_.*")
+        .blocklist_type("__int64_t")
+        .blocklist_type("fpos_t")
+        .raw_line("use libc::{time_t, FILE};")
+        // Disable layout tests — the assertions contain architecture-specific
+        // size/alignment constants (pointer width, long size) that fail when
+        // pre-generated bindings from one arch are compiled on another
+        // (e.g., arm64 bindings on armv7).
+        .layout_tests(false)
         .size_t_is_usize(true)
-        // these are never part of the API
-        .blocklist_function("_.*")
-        // consts creating duplications
-        .blocklist_item("FP_NAN")
-        .blocklist_item("FP_INFINITE")
-        .blocklist_item("FP_ZERO")
-        .blocklist_item("FP_SUBNORMAL")
-        .blocklist_item("FP_NORMAL")
-        // Rust doesn't support long double, and bindgen can't skip it
-        // https://github.com/rust-lang/rust-bindgen/issues/1549
-        .blocklist_function("acoshl")
-        .blocklist_function("acosl")
-        .blocklist_function("asinhl")
-        .blocklist_function("asinl")
-        .blocklist_function("atan2l")
-        .blocklist_function("atanhl")
-        .blocklist_function("atanl")
-        .blocklist_function("cbrtl")
-        .blocklist_function("ceill")
-        .blocklist_function("copysignl")
-        .blocklist_function("coshl")
-        .blocklist_function("cosl")
-        .blocklist_function("dreml")
-        .blocklist_function("ecvt_r")
-        .blocklist_function("erfcl")
-        .blocklist_function("erfl")
-        .blocklist_function("exp2l")
-        .blocklist_function("expl")
-        .blocklist_function("expm1l")
-        .blocklist_function("fabsl")
-        .blocklist_function("fcvt_r")
-        .blocklist_function("fdiml")
-        .blocklist_function("finitel")
-        .blocklist_function("floorl")
-        .blocklist_function("fmal")
-        .blocklist_function("fmaxl")
-        .blocklist_function("fminl")
-        .blocklist_function("fmodl")
-        .blocklist_function("frexpl")
-        .blocklist_function("gammal")
-        .blocklist_function("hypotl")
-        .blocklist_function("ilogbl")
-        .blocklist_function("isinfl")
-        .blocklist_function("isnanl")
-        .blocklist_function("j0l")
-        .blocklist_function("j1l")
-        .blocklist_function("jnl")
-        .blocklist_function("ldexpl")
-        .blocklist_function("lgammal")
-        .blocklist_function("lgammal_r")
-        .blocklist_function("llrintl")
-        .blocklist_function("llroundl")
-        .blocklist_function("log10l")
-        .blocklist_function("log1pl")
-        .blocklist_function("log2l")
-        .blocklist_function("logbl")
-        .blocklist_function("logl")
-        .blocklist_function("lrintl")
-        .blocklist_function("lroundl")
-        .blocklist_function("modfl")
-        .blocklist_function("nanl")
-        .blocklist_function("nearbyintl")
-        .blocklist_function("nextafterl")
-        .blocklist_function("nexttoward")
-        .blocklist_function("nexttowardf")
-        .blocklist_function("nexttowardl")
-        .blocklist_function("powl")
-        .blocklist_function("qecvt")
-        .blocklist_function("qecvt_r")
-        .blocklist_function("qfcvt")
-        .blocklist_function("qfcvt_r")
-        .blocklist_function("qgcvt")
-        .blocklist_function("remainderl")
-        .blocklist_function("remquol")
-        .blocklist_function("rintl")
-        .blocklist_function("roundl")
-        .blocklist_function("scalbl")
-        .blocklist_function("scalblnl")
-        .blocklist_function("scalbnl")
-        .blocklist_function("significandl")
-        .blocklist_function("sinhl")
-        .blocklist_function("sinl")
-        .blocklist_function("sqrtl")
-        .blocklist_function("strtold")
-        .blocklist_function("tanhl")
-        .blocklist_function("tanl")
-        .blocklist_function("tgammal")
-        .blocklist_function("truncl")
-        .blocklist_function("y0l")
-        .blocklist_function("y1l")
-        .blocklist_function("ynl")
+        .derive_eq(true)
+        .no_partialeq("libraw_callbacks_t")
+        .no_partialeq("LibRaw_abstract_datastream")
         .generate()
         .expect("Unable to generate bindings");
 
