@@ -2,7 +2,7 @@
 name = "rsraw-sys"
 version = "0.1.0"
 build = "build.rs"
-include = ["src/lib.rs", "src/bindings.rs", "LICENSE-*", "README.md", "LibRaw/libraw/*", "LibRaw/src/*", "LibRaw/internal/*", "LibRaw/COPYRIGHT", "LibRaw/LICENSE.*", "build.rs"]
+include = ["src/lib.rs", "LICENSE-*", "README.md", "LibRaw/libraw/*", "LibRaw/src/*", "LibRaw/internal/*", "LibRaw/COPYRIGHT", "LibRaw/LICENSE.*", "build.rs"]
 edition = "2021"
 authors = ["hexilee <i@hexilee.me>"]
 description = "Low-level FFI bindings for the LibRaw C++ library"
@@ -19,16 +19,14 @@ libc = "0.2"
 
 [features]
 default = []
-# Regenerate bindings at build time using libclang (dynamic loading).
-# Requires libclang.so/dylib to be available at build time.
-bindgen = ["dep:bindgen", "bindgen/runtime"]
-# Regenerate bindings at build time using libclang (static linking).
-# Use this on musl or other platforms where dlopen is unavailable.
-bindgen-static = ["dep:bindgen", "bindgen/static"]
+# Link libclang statically instead of loading dynamically at build time.
+# Use this on platforms where dlopen is unavailable or libclang.so is not
+# installed (e.g. some minimal Docker images).
+bindgen-static = ["bindgen/static"]
 
 [lib]
 name = "rsraw_sys"
 
 [build-dependencies]
 cc = { version = "1.2", features = ["parallel"] }
-bindgen = { version = "0.71", default-features = false, optional = true }
+bindgen = { version = "0.71", default-features = false, features = ["runtime"] }

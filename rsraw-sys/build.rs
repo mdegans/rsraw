@@ -8,6 +8,14 @@ fn main() {
 
 fn build(out_dir: impl AsRef<Path>) {
     let mut libraw = cc::Build::new();
+    let compiler = libraw.get_compiler();
+
+    // On MSVC, LibRaw headers default to __declspec(dllimport) for the
+    // public API.  We compile the sources directly (not importing a DLL),
+    // so we must define LIBRAW_NODLL to suppress the dllimport attribute.
+    if compiler.is_like_msvc() {
+        libraw.define("LIBRAW_NODLL", None);
+    }
 
     libraw.cpp(true);
     libraw.include("LibRaw/");
@@ -99,8 +107,10 @@ fn build(out_dir: impl AsRef<Path>) {
     libraw.flag_if_supported("-Wno-unused-result");
     libraw.flag_if_supported("-Wno-format-overflow");
 
-    // thread safety
-    libraw.flag("-pthread");
+    // thread safety (GCC/Clang only — MSVC uses /MT or /MD automatically)
+    if !compiler.is_like_msvc() {
+        libraw.flag("-pthread");
+    }
     libraw.compile("raw");
 
     println!(
@@ -110,52 +120,18 @@ fn build(out_dir: impl AsRef<Path>) {
     println!("cargo:rustc-link-lib=static=raw");
 }
 
-/// Generate or copy FFI bindings.
+/// Generate FFI bindings from LibRaw headers using bindgen.
 ///
-/// By default (no `bindgen`/`bindgen-static` features), uses the pre-generated
-/// `src/bindings.rs` shipped with the crate. This avoids needing libclang at
-/// build time.
+/// Requires libclang to be available at build time (dynamically loaded by
+/// default, or statically linked with the `bindgen-static` feature).
 ///
-/// With `bindgen` or `bindgen-static` feature enabled, regenerates bindings
-/// from the LibRaw headers using `bindgen`. Use this when updating LibRaw.
+/// Bindings are always regenerated for the target platform, ensuring correct
+/// type sizes, alignment, and ABI for every supported architecture.
 fn bindings(out_dir: impl AsRef<Path>) {
     let out_path = out_dir.as_ref().join("bindings.rs");
     if out_path.exists() {
         return;
     }
-
-    #[cfg(any(feature = "bindgen", feature = "bindgen-static"))]
-    {
-        generate_bindings(&out_path);
-        return;
-    }
-
-    #[cfg(not(any(feature = "bindgen", feature = "bindgen-static")))]
-    {
-        // Use pre-generated bindings shipped with the crate.
-        let manifest_dir = env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
-        let pregenerated = Path::new(&manifest_dir).join("src/bindings.rs");
-        if !pregenerated.exists() {
-            panic!(
-                "Pre-generated bindings not found at {}. \
-                 Either enable the `bindgen` or `bindgen-static` feature to \
-                 generate them, or ensure src/bindings.rs is present.",
-                pregenerated.display()
-            );
-        }
-        std::fs::copy(&pregenerated, &out_path).unwrap_or_else(|e| {
-            panic!(
-                "Failed to copy pre-generated bindings from {} to {}: {}",
-                pregenerated.display(),
-                out_path.display(),
-                e
-            );
-        });
-    }
-}
-
-#[cfg(any(feature = "bindgen", feature = "bindgen-static"))]
-fn generate_bindings(out_path: &Path) {
     let bindings = bindgen::Builder::default()
         .header("LibRaw/libraw/libraw.h")
         .use_core()
@@ -187,11 +163,6 @@ fn generate_bindings(out_path: &Path) {
         .blocklist_type("__int64_t")
         .blocklist_type("fpos_t")
         .raw_line("use libc::{time_t, FILE};")
-        // Disable layout tests — the assertions contain architecture-specific
-        // size/alignment constants (pointer width, long size) that fail when
-        // pre-generated bindings from one arch are compiled on another
-        // (e.g., arm64 bindings on armv7).
-        .layout_tests(false)
         .size_t_is_usize(true)
         .derive_eq(true)
         .no_partialeq("libraw_callbacks_t")
