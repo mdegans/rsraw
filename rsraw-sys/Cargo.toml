@@ -18,10 +18,13 @@ readme = "../README.md"
 libc = "0.2"
 
 [features]
-default = []
+default = ["bindgen-runtime"]
+# Load libclang dynamically at build time (default). Works on most platforms
+# where libclang.so / libclang.dylib / libclang.dll is installed.
+bindgen-runtime = ["bindgen/runtime"]
 # Link libclang statically instead of loading dynamically at build time.
-# Use this on platforms where dlopen is unavailable or libclang.so is not
-# installed (e.g. some minimal Docker images).
+# Use this on musl/static-linking platforms where dlopen is unavailable.
+# Mutually exclusive with bindgen-runtime (clang-sys enforces this).
 bindgen-static = ["bindgen/static"]
 
 [lib]
@@ -29,4 +32,4 @@ name = "rsraw_sys"
 
 [build-dependencies]
 cc = { version = "1.2", features = ["parallel"] }
-bindgen = { version = "0.71", default-features = false, features = ["runtime"] }
+bindgen = { version = "0.71", default-features = false }

@@ -13,6 +13,11 @@ categories = ["multimedia::images", "filesystem", "parsing"]
 readme = "../README.md"
 exclude = ["tests/assets"]
 
+[features]
+default = ["rsraw-sys/default"]
+# Statically link libclang. Must use with default-features = false.
+bindgen-static = ["rsraw-sys/bindgen-static"]
+
 [dependencies]
 rsraw-sys = { path = "../rsraw-sys", version = "0.1" }
 chrono = { version = "0.4", features = ["clock", "serde"] }
