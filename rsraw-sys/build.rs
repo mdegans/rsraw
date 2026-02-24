@@ -100,11 +100,16 @@ fn build(out_dir: impl AsRef<Path>) {
     libraw.flag_if_supported("-Wno-unused-result");
     libraw.flag_if_supported("-Wno-format-overflow");
 
+    // We're building LibRaw as a static library, so suppress dllimport/dllexport
+    // decorations and tell the headers we're building the library itself.
+    // See LibRaw's Makefile.msvc: static objects use both LIBRAW_NODLL and LIBRAW_BUILDLIB.
+    libraw.define("LIBRAW_NODLL", None);
+    libraw.define("LIBRAW_BUILDLIB", None);
+
     // thread safety (not needed on MSVC where threads are implicit)
     if !compiler.is_like_msvc() {
         libraw.flag("-pthread");
     }
-    libraw.static_flag(true);
     libraw.compile("raw");
 
     println!(
@@ -121,6 +126,8 @@ fn bindings(out_dir: impl AsRef<Path>) {
     }
     let bindings = bindgen::Builder::default()
         .header("LibRaw/libraw/libraw.h")
+        // Match the static-build defines so DllDef resolves to nothing
+        .clang_args(&["-DLIBRAW_NODLL", "-DLIBRAW_BUILDLIB"])
         .use_core()
         .ctypes_prefix("libc")
         .generate_comments(true)
