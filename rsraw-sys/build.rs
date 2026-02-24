@@ -9,9 +9,6 @@ fn main() {
 fn build(out_dir: impl AsRef<Path>) {
     let mut libraw = cc::Build::new();
     let compiler = libraw.get_compiler();
-    if compiler.is_like_msvc() {
-        panic!("MSVC is not supported");
-    }
 
     libraw.cpp(true);
     libraw.include("LibRaw/");
@@ -103,8 +100,10 @@ fn build(out_dir: impl AsRef<Path>) {
     libraw.flag_if_supported("-Wno-unused-result");
     libraw.flag_if_supported("-Wno-format-overflow");
 
-    // thread safety
-    libraw.flag("-pthread");
+    // thread safety (not needed on MSVC where threads are implicit)
+    if !compiler.is_like_msvc() {
+        libraw.flag("-pthread");
+    }
     libraw.static_flag(true);
     libraw.compile("raw");
 
